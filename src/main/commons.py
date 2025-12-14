@@ -6,18 +6,37 @@ from cryptography.hazmat.primitives import hmac
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives import serialization
 
-COMUNICATION_PORT = 5000
+COMUNICATION_PORT = 6027
 DEFAULT_IP = "127.0.0.1"
 
-# Precoded 128 bit root key
-ROOT_KEY = os.urandom(16)
+# Precoded 128 bit root key (fixed value shared between sender and receiver)
+ROOT_KEY = bytes.fromhex("0123456789abcdef0123456789abcdef")
+
+BUFFER_SIZE = 4096
 
 def _generate_df_private_key():
     return X25519PrivateKey.generate()
 
-def _generate_df_public_key(private_key):
+def _generate_df_public_key(private_key : X25519PrivateKey):
     return private_key.public_key()
+
+def serialize_public_key(public_key : X25519PublicKey):
+    return public_key.public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw
+    )
+
+def deserialize_public_key(public_key_bytes : bytes) -> X25519PublicKey: 
+    return X25519PublicKey.from_public_bytes(public_key_bytes)
+
+def send_public_key(socket, public_key : X25519PublicKey):
+    socket.send(serialize_public_key(public_key))
+
+def receive_public_key(socket):
+    key_bytes = socket.recv(32)
+    return deserialize_public_key(key_bytes)
 
 def generate_df_key_pair():
     private_key = _generate_df_private_key()
