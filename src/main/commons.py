@@ -1,4 +1,5 @@
 import os
+import threading
 from cryptography.hazmat.primitives.asymmetric.x25519 import (
     X25519PrivateKey, X25519PublicKey
 )
@@ -10,6 +11,14 @@ from cryptography.hazmat.primitives import serialization
 
 COMUNICATION_PORT = 6027
 DEFAULT_IP = "127.0.0.1"
+
+# Lock for thread-safe printing
+print_lock = threading.Lock()
+
+def safe_print(*args, **kwargs):
+    """Thread-safe print function to avoid mixing output from different threads"""
+    with print_lock:
+        print(*args, **kwargs)
 
 # Precoded 128 bit root key (fixed value shared between sender and receiver)
 ROOT_KEY = bytes.fromhex("0123456789abcdef0123456789abcdef")

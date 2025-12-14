@@ -1,7 +1,7 @@
 import socket
 import threading
 
-from commons import BUFFER_SIZE, COMUNICATION_PORT, DEFAULT_IP, KDF_CK, KDF_RK, ROOT_KEY, decrypt, deserialize_public_key, encrypt, generate_df_key_pair, obtain_shared_secret, receive_public_key, send_public_key, serialize_public_key
+from commons import BUFFER_SIZE, COMUNICATION_PORT, DEFAULT_IP, KDF_CK, KDF_RK, ROOT_KEY, decrypt, deserialize_public_key, encrypt, generate_df_key_pair, obtain_shared_secret, receive_public_key, send_public_key, serialize_public_key, safe_print
 
 #primero tengo que hacer el intercambio inicial de claves
 
@@ -17,38 +17,31 @@ def receive_data(socket):
     global new_root_key
     global other_public_key
     global receiving_chain_key
-    #flujo que tiene que seguir esto 
-    # se recibe un texto que lleva la clave delante 
-    # se extrae la clave y se compara con la que tenemos en el otro extremo 
-    # si la clave que se recibe es la misma que la que tenemmos guardada usamos directamente el ratched simetrico para tener la clave de descifrado
-    # si la clave que se recibe es diferente tenemos que hacer un ratchet de diffie para tener la nueva clave de recepción y con eso hacemos el ratchet simetrico para la clave de descicfrado
-    #(esto es para la clave de recepción : tenemos un chain key para envio y otro para recepción)
 
     while True:
         data = socket.recv(BUFFER_SIZE)
         if not data:
             break
         received_public_key_bytes = data[:32]
-        print("Received public key bytes:", received_public_key_bytes.hex())
+        safe_print("\n[RECEPTOR] Clave pública recibida:", received_public_key_bytes.hex()[:16] + "...")
         received_ciphertext = data[32:]
         if other_public_key and serialize_public_key(other_public_key) == received_public_key_bytes:
-            print("Las claves públicas son iguales")
-            #usas eso con el ratchet simetrico para obtener la message key
+            safe_print("[RECEPTOR] → Usando ratchet simétrico (clave igual)")
             if(receiving_chain_key is None):
                 message_key , receiving_chain_key = KDF_CK(chain_key)
             else: message_key , receiving_chain_key = KDF_CK(receiving_chain_key)
         else:
-            print("Las claves públicas son diferentes")
-            # generar nueva ratchet de diffie hellman
+            safe_print("[RECEPTOR] → Ejecutando DH ratchet (clave diferente)")
             received_public_key = deserialize_public_key(received_public_key_bytes)
             other_public_key = received_public_key
             secret = obtain_shared_secret(private_key, received_public_key)
             new_root_key , receiving_chain_key = KDF_RK(new_root_key, secret)
+            chain_key = receiving_chain_key
             message_key , receiving_chain_key = KDF_CK(receiving_chain_key)
 
-        print("Received chain key:", receiving_chain_key.hex())
         plaintext = decrypt(message_key, received_ciphertext, None)
-        print("\nRecibido:", plaintext.decode() , end="\n")
+        safe_print("[RECEPTOR] 📨 Recibido: " + plaintext.decode())
+        safe_print("Enviar(exit para salir): ", end="", flush=True)
 
 def main():
     global private_key
@@ -58,61 +51,51 @@ def main():
     global chain_key
     global other_public_key
 
-    print("----Client iniciado----")
+    safe_print("━" * 70)
+    safe_print("        🔐 CLIENTE - DOUBLE RATCHET ENCRYPTION PROTOCOL")
+    safe_print("━" * 70)
+    
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         client.connect((DEFAULT_IP, COMUNICATION_PORT))
     except ConnectionRefusedError:
-        print("Error: no se pudo conectar con el servidor")
+        safe_print("❌ Error: no se pudo conectar con el servidor")
         exit(1)
 
-    print("Conectado al servidor")
-
-    print("Comenzando el proceso de intercambio de claves")
+    safe_print("✓ Conectado al servidor\n")
+    safe_print("🔄 Intercambiando claves públicas iniciales...")
     
     private_key , public_key = generate_df_key_pair()
-    print("Enviando clave publica al otro extremo")
     send_public_key(client, public_key)
+    safe_print("  ✓ Clave pública enviada")
 
-
-
-    print("Recibiendo la clave del otro extremo")
     received_public_key = receive_public_key(client)
+    safe_print("  ✓ Clave pública recibida\n")
 
-    #con esto ya calculamos las primeras claves para el ratchet (tanto envio como recepcion)
     secret = obtain_shared_secret(private_key, received_public_key)
-    print("secret bytes:", secret.hex())
-
     new_root_key = ROOT_KEY
 
     threading.Thread(target=receive_data, args=(client, ), daemon=True).start()
+    
+    safe_print("✓ Listo para comunicarse")
+    safe_print("━" * 70 + "\n")
 
-    #en el bucle de envío simplemente hacemos el ratchet simetrico para obtener la clave necesria y una vez enviado en messaje hacemos un ratched de diffie nuevo (generando nuevo par de claves)
-    # la nueva clave es la que usamos para el siguiente envio
     while True:
-        
         data = input("Enviar(exit para salir): ")
         if data.lower() == "exit":
             break
 
-        # Generar nueva clave DH ANTES de enviar (excepto en el primer mensaje)
         if other_public_key is not None:
             private_key, public_key = generate_df_key_pair()
             secret = obtain_shared_secret(private_key, other_public_key)
 
-        print("previous root key:", new_root_key.hex())
-
         new_root_key , sending_chain_key = KDF_RK(new_root_key, secret)
         message_key , sending_chain_key = KDF_CK(sending_chain_key)
-
-        print("root key:", new_root_key.hex())
-        print("message key:", message_key.hex())
             
         ciphertext = encrypt(message_key, data.encode(), None)
-        # Envía: clave pública + mensaje cifrado
         public_key_bytes = serialize_public_key(public_key)
         client.send(public_key_bytes + ciphertext)
-        print("Enviado:", data)
+        safe_print("[EMISOR] 📤 Enviado: " + data)
         
 
 if __name__ == "__main__":
