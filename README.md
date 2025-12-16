@@ -4,6 +4,13 @@
 
 Este es el repositorio de la práctica 3, que consiste en implementar el protocolo de doble ratchet de Diffie-Hellman (Double Ratchet) en Python 3. La implementación actual permite que cualquier usuario pueda comenzar enviando mensajes y recalcula el ratchet de diffie-hellman para cada mensaje enviado (en lugar de enviar x mensajes con el mismo ratchet para tener mayor seguridad y simplicidad en el código).
 
+Para ejecutar el programa tenemos que ejecutar ambas partes : el cliente y el servidor.
+
+```python
+python3 client.py
+python3 server.py
+```
+
 ## Commons.py (sección de funciones genéricas y variables de configuración)
 
 Dentro de este fichero se encuentran algunos parámetros que son necesarios para establecer la conexión entre las dos partes y otras funciones relacionadas con el cifrado y descifrado de datos.
